@@ -22,4 +22,4 @@ Author: Tamir Mayblat, tamirmayb@gmail.com
  
 ** Example :  http://localhost:8000/echoAtTime?message_text 2020-12-01-01 12:00
 
-### Thanks!
+### Thanks
