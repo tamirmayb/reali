@@ -105,7 +105,7 @@ public class MessagesAppServer {
 
     @AllArgsConstructor
     @Getter
-    private static class Message {
+    public static class Message {
         private String text;
         private Long printTime;
     }
