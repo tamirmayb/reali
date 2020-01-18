@@ -19,33 +19,20 @@ import java.util.TimerTask;
 public class MessagesAppServer {
 
     private static final String REDIS_MESSAGES_KEY = "messages";
-    private static final String REDIS_HOST = "localhost";
-    private static final int REDIS_PORT = 6379;
-
     private static final int MAX_RETRIES = 3;
     private static final int WAIT_MINS = 1 * 60 * 1000;
     private int retries = 0;
-
-    private Jedis jedis;
-
-    private void checkJedis() {
-        if(jedis == null) {
-            this.jedis = new Jedis(REDIS_HOST, REDIS_PORT);
-            jedis.select(2);
-        }
-    }
 
     public static void main(String[] args) throws Exception {
         MessagesAppServer server = new MessagesAppServer();
         server.initServer();
         server.printMessages();
     }
-    private class EchoAtTimeHandler implements HttpHandler {
+    private static class EchoAtTimeHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange request) throws IOException {
-            checkJedis();
             Message message = MessageUtil.formatMessage(request.getRequestURI().getQuery());
-            jedis.zadd(REDIS_MESSAGES_KEY, message.getPrintTime(), message.getText());
+            RedisSingleton.getInstance().zadd(REDIS_MESSAGES_KEY, message.getPrintTime(), message.getText());
 
             String response = "Message added: " + message.getText();
             request.sendResponseHeaders(200, response.length());
@@ -69,7 +56,7 @@ public class MessagesAppServer {
         System.out.println("Server is listening...");
     }
 
-    private class ExitHandler implements HttpHandler {
+    private static class ExitHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange request) {
             System.exit(0);
@@ -78,26 +65,21 @@ public class MessagesAppServer {
 
     private void printMessages() {
         Timer timer = new Timer();
+        Jedis jedis = RedisSingleton.getInstance();
         timer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
                 try {
-                    checkJedis();
                     Set<String> messages = jedis.zrangeByScore(REDIS_MESSAGES_KEY, 0, new Date().getTime());
                     if (!messages.isEmpty()) {
                         jedis.zremrangeByScore(REDIS_MESSAGES_KEY, 0, new Date().getTime());
                         messages.forEach(message -> {
-                            if (message.toLowerCase().trim().equals("exit")) {
-                                System.out.println("Bye bye!");
-                                return;
+                            System.out.println(message);
+                            Long zcount = jedis.zcount(REDIS_MESSAGES_KEY, 0, Long.MAX_VALUE);
+                            if(zcount > 0) {
+                                System.out.println("Redis still contains " + zcount + " awaiting messages");
                             } else {
-                                System.out.println(message);
-                                Long zcount = jedis.zcount(REDIS_MESSAGES_KEY, 0, Long.MAX_VALUE);
-                                if(zcount > 0) {
-                                    System.out.println("Redis still contains " + zcount + " awaiting messages");
-                                } else {
-                                    System.out.println("There are no messages in Redis");
-                                }
+                                System.out.println("There are no messages in Redis");
                             }
                         });
                     }
@@ -108,7 +90,7 @@ public class MessagesAppServer {
                         System.err.println("MessagesClient cannot connect to redis trying again in 1 min...");
                     } else {
                         System.err.println("MessagesClient connect to redis stopping client");
-                        return;
+                        System.exit(0);
                     }
                     try {
                         Thread.sleep(WAIT_MINS);
@@ -123,7 +105,7 @@ public class MessagesAppServer {
 
     @AllArgsConstructor
     @Getter
-    public static class Message {
+    private static class Message {
         private String text;
         private Long printTime;
     }
